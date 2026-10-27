@@ -23,8 +23,7 @@ needs no add-on, no proxy, and no custom cards.
 
 ## Why not just show a Lovelace dashboard?
 
-That was the first version, and it was abandoned for two reasons a television
-makes unavoidable.
+That was the first version, and it was abandoned for two reasons:
 
 **Scale.** The Shield's WebView reports roughly 960 CSS pixels, so Home
 Assistant lays out as though for a tablet. Cards come out enormous on a 55"
