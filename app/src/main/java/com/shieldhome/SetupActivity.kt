@@ -17,6 +17,7 @@ package com.shieldhome
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -89,6 +90,14 @@ class SetupActivity : Activity() {
             i.getStringExtra("path"),
             i.getStringExtra("token"),
             entities
+        )
+        Log.i(
+            "ShieldHome",
+            "settings applied" +
+                (if (i.hasExtra("url")) " url" else "") +
+                (if (i.hasExtra("token")) " token" else "") +
+                (if (entities != null) " entities(" + entities.length + " bytes)" else "") +
+                (if (fileName != null && entities == null) " entitiesFile=MISSING" else "")
         )
         Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
 

@@ -58,7 +58,36 @@ class MainActivity : AppCompatActivity() {
         dash = WebView(this)
         setContentView(dash)
         Log.i(TAG, "launcher starting")
+        loadedSig = configSig()
         setupWebView()
+    }
+
+    /**
+     * Fingerprint of the settings the current page was built from. The token is
+     * reduced to its length so it never reaches the log.
+     */
+    private fun configSig(): String =
+        Config.url(this) + "|" + Config.path(this) + "|" +
+            Config.token(this).length + "|" + Config.entitiesJson(this).hashCode()
+
+    private var loadedSig: String = ""
+
+    /**
+     * This activity is singleTask, so returning from the settings screen
+     * delivers onNewIntent rather than onCreate — and settings are read in
+     * onCreate. Without this check a reconfigure appeared to do nothing.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (loadedSig.isNotEmpty() && configSig() != loadedSig) {
+            Log.i(TAG, "settings changed, reloading")
+            recreate()
+        }
+    }
+
+    override fun onNewIntent(newIntent: Intent?) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
