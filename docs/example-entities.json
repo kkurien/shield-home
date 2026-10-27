@@ -2,18 +2,30 @@
   "weather": "weather.forecast_home",
 
   "appOrder": [
-    "Emby", "YouTube", "HBO Max", "Netflix", "Prime Video",
-    "Apple TV", "Disney+", "Hulu", "Instagram", "Immich"
+    "Netflix", "YouTube", "Plex", "Prime Video",
+    "Disney+", "Emby", "Hulu"
   ],
   "appLast": ["YouTube Music"],
 
-  "controls": [
-    {"entity": "light.bed_lights",            "name": "Bed lights"},
-    {"entity": "light.bed_strip_light_left",  "name": "Left"},
-    {"entity": "light.bed_strip_light_right", "name": "Right"},
-    {"entity": "humidifier.humidifier",       "name": "Humidifier"},
-    {"entity": "switch.gaming_pc",            "name": "Gaming PC",
-     "status": "binary_sensor.gaming_pc_online"}
+  "controlGroups": [
+    {
+      "name": "Lights",
+      "items": [
+        {"entity": "light.living_room", "name": "Living room", "icon": "bulb"},
+        {"entity": "light.bed_strip", "name": "Bed strip", "icon": "strip"},
+        {"entity": "switch.ceiling_light", "name": "Ceiling", "icon": "ceiling"},
+        {"entity": "switch.fan_light", "name": "Fan light", "icon": "fanlight"}
+      ]
+    },
+    {
+      "name": "Devices",
+      "items": [
+        {"entity": "switch.ceiling_fan", "name": "Fan", "icon": "fan"},
+        {"entity": "humidifier.humidifier", "name": "Humidifier", "icon": "humidifier"},
+        {"entity": "switch.desktop_pc", "name": "Desktop PC", "icon": "pc",
+         "status": "binary_sensor.desktop_pc_online"}
+      ]
+    }
   ],
 
   "climate": "climate.thermostat",
@@ -21,7 +33,7 @@
   "appliances": [
     {"entity": "sensor.washer_machine_state", "name": "Washer",
      "detail": "sensor.washer_completion_time"},
-    {"entity": "sensor.dryer_machine_state",  "name": "Dryer",
+    {"entity": "sensor.dryer_machine_state", "name": "Dryer",
      "detail": "sensor.dryer_completion_time"},
     {"entity": "sensor.printer_print_status", "name": "3D printer"}
   ],
@@ -32,8 +44,8 @@
   },
 
   "cameras": [
-    {"entity": "camera.doorbell_high_resolution_channel", "name": "Doorbell"},
-    {"entity": "camera.doorbell_package_camera",          "name": "Package"},
-    {"entity": "camera.turret_high_resolution_channel",   "name": "Living room"}
+    {"entity": "camera.front_door", "name": "Front door"},
+    {"entity": "camera.back_yard", "name": "Back yard"},
+    {"entity": "camera.garage", "name": "Garage"}
   ]
 }
