@@ -1,0 +1,6 @@
+<resources>
+    <color name="bg">#FF0B0B0C</color>
+    <color name="tile">#FF17171A</color>
+    <color name="tile_focused">#FF2B6CB0</color>
+    <color name="text">#FFEDEDED</color>
+</resources>

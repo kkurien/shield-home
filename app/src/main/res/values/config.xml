@@ -1,0 +1,4 @@
+<resources>
+    <!-- Connection settings now live on-device (Config.kt / SetupActivity),
+         so the APK carries no credential and changes need no rebuild. -->
+</resources>

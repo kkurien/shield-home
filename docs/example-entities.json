@@ -1,0 +1,39 @@
+{
+  "weather": "weather.forecast_home",
+
+  "appOrder": [
+    "Emby", "YouTube", "HBO Max", "Netflix", "Prime Video",
+    "Apple TV", "Disney+", "Hulu", "Instagram", "Immich"
+  ],
+  "appLast": ["YouTube Music"],
+
+  "controls": [
+    {"entity": "light.bed_lights",            "name": "Bed lights"},
+    {"entity": "light.bed_strip_light_left",  "name": "Left"},
+    {"entity": "light.bed_strip_light_right", "name": "Right"},
+    {"entity": "humidifier.humidifier",       "name": "Humidifier"},
+    {"entity": "switch.gaming_pc",            "name": "Gaming PC",
+     "status": "binary_sensor.gaming_pc_online"}
+  ],
+
+  "climate": "climate.thermostat",
+
+  "appliances": [
+    {"entity": "sensor.washer_machine_state", "name": "Washer",
+     "detail": "sensor.washer_completion_time"},
+    {"entity": "sensor.dryer_machine_state",  "name": "Dryer",
+     "detail": "sensor.dryer_completion_time"},
+    {"entity": "sensor.printer_print_status", "name": "3D printer"}
+  ],
+
+  "vacuum": {
+    "entity": "vacuum.roborock",
+    "name": "Roborock"
+  },
+
+  "cameras": [
+    {"entity": "camera.doorbell_high_resolution_channel", "name": "Doorbell"},
+    {"entity": "camera.doorbell_package_camera",          "name": "Package"},
+    {"entity": "camera.turret_high_resolution_channel",   "name": "Living room"}
+  ]
+}
