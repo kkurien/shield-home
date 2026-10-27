@@ -36,11 +36,16 @@ object Config {
       "weather": "weather.forecast_home",
       "appOrder": ["Netflix", "YouTube", "Plex", "Prime Video", "Disney+"],
       "appLast": [],
-      "controls": [
-        {"entity": "light.living_room", "name": "Living room"},
-        {"entity": "light.bedroom",     "name": "Bedroom"},
-        {"entity": "switch.desktop_pc", "name": "Desktop PC",
-         "status": "binary_sensor.desktop_pc_online"}
+      "controlGroups": [
+        {"name": "Lights", "items": [
+          {"entity": "light.living_room", "name": "Living room"},
+          {"entity": "light.bedroom",     "name": "Bedroom"},
+          {"entity": "switch.ceiling_light", "name": "Ceiling"}
+        ]},
+        {"name": "Devices", "items": [
+          {"entity": "switch.desktop_pc", "name": "Desktop PC",
+           "status": "binary_sensor.desktop_pc_online"}
+        ]}
       ],
       "climate": "climate.thermostat",
       "appliances": [

@@ -16,6 +16,7 @@
     --accent:    #7aa2f7;
     --accent-dim:rgba(122,162,247,0.18);
     --ok:        #7ee787;
+    --warm:      #ffc98a;
     --warn:      #f0b429;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -91,16 +92,36 @@
   .app span { font-size: 19px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ---------- controls ---------- */
-  .ctl { display: flex; gap: 14px; }
+  /* Groups sit side by side, each with its own caption, so grouping costs no
+     vertical space over a single "Home controls" label. */
+  .ctl { display: flex; gap: 26px; overflow-x: hidden; }
+  .grp { display: flex; flex-direction: column; flex: 0 0 auto; }
+  .grp > .cap { font-size: 14px; letter-spacing: .14em; text-transform: uppercase;
+                color: var(--muted); margin-bottom: 7px; }
+  .grp > .row2 { display: flex; gap: 14px; }
   /* 60% of the width they'd take if they split the row evenly. */
-  .c { flex: 0 0 211px; height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; }
+  .c { position: relative; overflow: hidden; flex: 0 0 211px; height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; }
   .c .n { font-size: 18px; font-weight: 500; }
   .c .s { font-size: 14px; color: var(--muted); margin-top: 2px; }
   /* Drawn as SVG, not a font glyph: the Shield has no ⏻ (U+23FB) and renders
      a tofu box for it. */
-  .c .pw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
-  .c .pw svg { width: 17px; height: 17px; }
+  .c .pw { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; transition: color .15s, border-color .15s, background .15s, box-shadow .15s; }
+  .c .pw svg { width: 20px; height: 20px; }
   .c.on .pw { border-color: var(--ok); color: var(--ok); }
+
+  /* A lit lamp reads warm, not green — and the glow says "on" from across the
+     room faster than the word does. */
+  .c.lit.on .pw {
+    border-color: var(--warm); color: var(--warm);
+    background: rgba(255, 201, 138, .14);
+    box-shadow: 0 0 14px rgba(255, 201, 138, .32);
+  }
+  .c.lit.on .s { color: var(--warm); }
+  .c.lit.on { border-color: rgba(255, 201, 138, .32); }
+
+  /* Brightness, for dimmable lights only. */
+  .c .bri { position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+            background: var(--warm); opacity: .85; transition: width .25s; }
   .c.on .s { color: var(--ok); }
 
   /* ---------- panels ---------- */
@@ -187,7 +208,6 @@
   </div>
 
   <div>
-    <div class="lbl">Home controls</div>
     <div class="ctl" id="ctl"></div>
   </div>
 
@@ -435,34 +455,122 @@ function toggleEntity(id) {
   callService("homeassistant", "toggle", id);
 }
 
-var POWER_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" ' +
-  'stroke-linecap="round"><path d="M12 3.2v8.3"/>' +
-  '<path d="M6.6 7.4a7.6 7.6 0 1 0 10.8 0"/></svg>';
+/* Icons are drawn, not font glyphs — the Shield has no symbol font to rely on
+   (an earlier ⏻ rendered as a tofu box). Shapes are kept simple and open so
+   they stay legible at ten feet. */
+function svg(body, w) {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+         'stroke-width="' + (w || 2) + '" stroke-linecap="round" ' +
+         'stroke-linejoin="round">' + body + "</svg>";
+}
 
+/* One pinwheel blade, repeated at 90° — cheaper than four hand-drawn paths.
+   Drawn large: at 20px on screen a dainty fan collapses into an asterisk. */
+function blades() {
+  var one = '<path d="M12 10.3c0-4.1 1.5-6.6 3.6-6.6 1.9 0 3.1 1.4 3.1 3.1 0 2.6-2.7 4-6.7 3.5"/>';
+  var out = "";
+  for (var i = 0; i < 4; i++) out += '<g transform="rotate(' + i * 90 + ' 12 12)">' + one + "</g>";
+  return out;
+}
+
+var ICONS = {
+  power:     svg('<path d="M12 3.2v8.3"/><path d="M6.6 7.4a7.6 7.6 0 1 0 10.8 0"/>', 2.2),
+  bulb:      svg('<path d="M9.6 18.4h4.8"/><path d="M10.4 21h3.2"/>' +
+                 '<path d="M12 3a6 6 0 0 0-3.4 10.9c.6.4.9 1 .9 1.7v.8h5v-.8c0-.7.3-1.3.9-1.7A6 6 0 0 0 12 3z"/>'),
+  strip:     svg('<rect x="2.5" y="9.5" width="19" height="5" rx="2.5"/>' +
+                 '<path d="M7 14.5v2M12 14.5v2M17 14.5v2"/>'),
+  ceiling:   svg('<path d="M12 3v3.2"/><path d="M4.5 14.5 12 6.2l7.5 8.3z"/>' +
+                 '<path d="M8 18.2h8"/>'),
+  fan:       svg(blades() + '<circle cx="12" cy="12" r="1.6"/>', 1.9),
+  fanlight:  svg('<g transform="translate(0,-2.2) scale(0.92) translate(1,0)">' + blades() +
+                 '<circle cx="12" cy="12" r="1.5"/></g>' +
+                 '<path d="M10 19.4h4M10.8 21.4h2.4"/>', 1.8),
+  humidifier: svg('<path d="M12 3.4c3.2 4.2 5.2 6.6 5.2 8.8a5.2 5.2 0 0 1-10.4 0c0-2.2 2-4.6 5.2-8.8z"/>'),
+  pc:        svg('<rect x="3.5" y="4.5" width="17" height="10.5" rx="1.5"/>' +
+                 '<path d="M9 19.5h6M12 15v4.5"/>'),
+  outlet:    svg('<rect x="4" y="4" width="16" height="16" rx="3"/>' +
+                 '<path d="M9.5 10v2M14.5 10v2"/>')
+};
+
+var LIGHT_ICONS = ["bulb", "strip", "ceiling", "fanlight"];
+
+/** Default icon from the entity domain when the config doesn't name one. */
+function iconFor(c) {
+  if (c.icon && ICONS[c.icon]) return c.icon;
+  var dom = (c.entity || "").split(".")[0];
+  if (dom === "light") return "bulb";
+  if (dom === "fan") return "fan";
+  if (dom === "humidifier") return "humidifier";
+  return "power";
+}
+
+/** Lights get the warm treatment; everything else stays green. */
+function isLightish(c, iconName) {
+  if (c.kind === "light") return true;
+  if (c.kind) return false;
+  return (c.entity || "").split(".")[0] === "light" ||
+         LIGHT_ICONS.indexOf(iconName) > -1;
+}
+
+function controlTile(c) {
+  var iconName = iconFor(c);
+  var el = document.createElement("div");
+  el.className = "c f" + (isLightish(c, iconName) ? " lit" : "");
+  el.tabIndex = 0;
+  el.dataset.nav = "ctl";
+  el.dataset.entity = c.entity;
+  if (c.status) el.dataset.status = c.status;
+  el.innerHTML = '<div><div class="n">' + esc(c.name) + '</div>' +
+                 '<div class="s"></div></div>' +
+                 '<div class="pw">' + ICONS[iconName] + "</div>" +
+                 '<div class="bri"></div>';
+  el.addEventListener("click", function () { toggleEntity(c.entity); });
+  return el;
+}
+
+/**
+ * Accepts either shape:
+ *   "controls":      [ {entity, name}, ... ]                  — one unlabelled group
+ *   "controlGroups": [ {name, items: [ {entity, name}, ...]} ] — labelled clusters
+ */
 function buildControls() {
   var host = $("ctl");
   host.innerHTML = "";
-  (ent.controls || []).forEach(function (c) {
-    var el = document.createElement("div");
-    el.className = "c f";
-    el.tabIndex = 0;
-    el.dataset.nav = "ctl";
-    el.dataset.entity = c.entity;
-    if (c.status) el.dataset.status = c.status;
-    el.innerHTML = '<div><div class="n">' + esc(c.name) + '</div>' +
-                   '<div class="s"></div></div><div class="pw">' + POWER_SVG + "</div>";
-    el.addEventListener("click", function () { toggleEntity(c.entity); });
-    host.appendChild(el);
+
+  var groups = ent.controlGroups;
+  if (!groups || !groups.length) {
+    groups = [{ name: "Home controls", items: ent.controls || [] }];
+  }
+
+  groups.forEach(function (g) {
+    if (!g.items || !g.items.length) return;
+    var box = document.createElement("div");
+    box.className = "grp";
+    var cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = g.name || "";
+    var row = document.createElement("div");
+    row.className = "row2";
+    g.items.forEach(function (c) { row.appendChild(controlTile(c)); });
+    box.appendChild(cap);
+    box.appendChild(row);
+    host.appendChild(box);
   });
 }
 
 function renderControls() {
-  Array.prototype.forEach.call($("ctl").children, function (el) {
+  Array.prototype.forEach.call($("ctl").querySelectorAll(".c"), function (el) {
     var id = el.dataset.entity, dom = id.split(".")[0];
     var statusId = el.dataset.status;
     var on = isOn(id);
     var sub = el.querySelector(".s");
+
+    // Brightness bar, only where the light actually reports one.
+    var bri = el.querySelector(".bri");
+    if (bri) {
+      var b = on ? attr(id, "brightness") : null;
+      bri.style.width = b != null ? Math.round((b / 255) * 100) + "%" : "0";
+    }
 
     // With a status entity (e.g. a ping sensor next to a power switch), the
     // ring reflects whether the machine is actually up — which is not the same
@@ -1093,16 +1201,18 @@ function move(dir) {
   if (best) { best.focus(); ensureVisible(best); }
 }
 
-/* Keep the focused app tile on screen by scrolling its row, so the app list
-   is not capped at what fits across 1920px. */
+/* Keep the focused tile on screen by scrolling whichever band holds it, so
+   neither the app list nor the controls are capped at what fits across
+   1920px. */
 function ensureVisible(el) {
-  var row = el.parentNode;
-  if (!row || row.id !== "apps") return;
-  var l = el.offsetLeft, r = l + el.offsetWidth, pad = 24;
-  if (l - pad < row.scrollLeft) {
-    row.scrollLeft = Math.max(0, l - pad);
-  } else if (r + pad > row.scrollLeft + row.clientWidth) {
-    row.scrollLeft = r + pad - row.clientWidth;
+  var row = el.closest ? el.closest("#apps, .ctl") : null;
+  if (!row) return;
+  var box = el.getBoundingClientRect(), rowBox = row.getBoundingClientRect();
+  var pad = 24;
+  if (box.left - pad < rowBox.left) {
+    row.scrollLeft -= (rowBox.left - box.left) + pad;
+  } else if (box.right + pad > rowBox.right) {
+    row.scrollLeft += (box.right - rowBox.right) + pad;
   }
 }
 

@@ -36,9 +36,12 @@
             </intent-filter>
         </activity>
 
+        <!-- singleTask so repeated `am start` calls reach onNewIntent rather
+             than stacking copies of the settings screen. -->
         <activity
             android:name=".SetupActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.ShieldHome" />
     </application>

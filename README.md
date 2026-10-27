@@ -86,10 +86,17 @@ adb uninstall com.shieldhome
 Which entities fill each panel is a JSON blob stored on the device. See
 [`docs/example-entities.json`](docs/example-entities.json) for a complete one.
 
+Push it as a file rather than passing it as an argument — `adb shell` hands
+the whole command to a shell *on the device*, which re-parses the quotes and
+newlines and mangles anything as long as this:
+
 ```bash
+adb push my-entities.json /sdcard/Android/data/com.shieldhome/files/
 adb shell am start -n com.shieldhome/.SetupActivity \
-  -e entities "$(cat my-entities.json)" -e finish true
+  -e entitiesFile my-entities.json -e finish true
 ```
+
+That directory belongs to the app, so it needs no storage permission.
 
 | Key | What it does |
 | --- | --- |

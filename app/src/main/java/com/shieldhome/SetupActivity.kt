@@ -20,6 +20,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import java.io.File
 
 /**
  * First-run settings. Can also be driven entirely over adb, which beats typing
@@ -27,34 +28,86 @@ import android.widget.Toast
  *
  *   adb shell am start -n com.shieldhome/.SetupActivity \
  *     -e url "http://192.168.1.10:8123" \
- *     -e path "/lovelace-tv/0" \
  *     -e token "eyJhbGciOi..." \
  *     -e finish true
+ *
+ * The entity map is too long and too full of quotes to survive two shells, so
+ * push it as a file instead and name it with entitiesFile:
+ *
+ *   adb push entities.json /sdcard/Android/data/com.shieldhome/files/
+ *   adb shell am start -n com.shieldhome/.SetupActivity \
+ *     -e entitiesFile entities.json -e finish true
  */
 class SetupActivity : Activity() {
+
+    /**
+     * Reads from the app's own external files directory, which needs no
+     * storage permission and is writable by `adb push`.
+     */
+    private fun readEntitiesFile(name: String): String? {
+        val f = File(getExternalFilesDir(null), name.substringAfterLast('/'))
+        return try {
+            if (f.isFile) f.readText() else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Applies any configuration carried by the intent. Returns true if the
+     * activity has finished and the caller should stop.
+     */
+    private fun applyIntent(i: Intent?): Boolean {
+        if (i == null) return false
+        val hasConfig = i.hasExtra("url") || i.hasExtra("token") ||
+            i.hasExtra("path") || i.hasExtra("entities") || i.hasExtra("entitiesFile")
+        if (!hasConfig) return false
+
+        var entities = i.getStringExtra("entities")
+        val fileName = i.getStringExtra("entitiesFile")
+        if (fileName != null) {
+            entities = readEntitiesFile(fileName)
+            if (entities == null) {
+                Toast.makeText(
+                    this,
+                    "Could not read $fileName from the app's files directory",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        Config.save(
+            this,
+            i.getStringExtra("url"),
+            i.getStringExtra("path"),
+            i.getStringExtra("token"),
+            entities
+        )
+        Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
+
+        if (i.getStringExtra("finish") == "true") {
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return true
+        }
+        return false
+    }
+
+    /**
+     * launchMode is singleTask, so a second `am start` while this screen is
+     * already open arrives here rather than at onCreate. Without this, the
+     * config in that intent is silently dropped — adb even warns about it
+     * ("intent has been delivered to currently running top-most instance").
+     */
+    override fun onNewIntent(newIntent: Intent?) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        applyIntent(newIntent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Headless configuration via intent extras
-        val i = intent
-        if (i?.hasExtra("url") == true || i?.hasExtra("token") == true ||
-            i?.hasExtra("path") == true || i?.hasExtra("entities") == true
-        ) {
-            Config.save(
-                this,
-                i.getStringExtra("url"),
-                i.getStringExtra("path"),
-                i.getStringExtra("token"),
-                i.getStringExtra("entities")
-            )
-            Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
-            if (i.getStringExtra("finish") == "true") {
-                startActivity(Intent(this, MainActivity::class.java))
-                finish()
-                return
-            }
-        }
+        if (applyIntent(intent)) return
 
         setContentView(R.layout.activity_setup)
 
