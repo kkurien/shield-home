@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Shield Home</title>
+<style>
+  /* Designed at a fixed 1920x1080 and scaled by the viewport meta, so every
+     size here is a real TV pixel rather than something the browser guesses. */
+  :root {
+    --bg:        #0a0c11;
+    --panel:     rgba(255,255,255,0.045);
+    --edge:      rgba(255,255,255,0.09);
+    --text:      #f2f4f8;
+    --muted:     #9aa3b2;
+    --accent:    #7aa2f7;
+    --accent-dim:rgba(122,162,247,0.18);
+    --ok:        #7ee787;
+    --warn:      #f0b429;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background:
+      radial-gradient(1200px 700px at 12% -10%, #1b2440 0%, transparent 60%),
+      radial-gradient(900px 600px at 95% 110%, #1a2b2e 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font: 400 20px/1.35 "Roboto", "Noto Sans", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* The design is authored at exactly 1920x1080 and scaled to the panel in JS.
+     Letting the WebView's viewport machinery do this proved unreliable on the
+     Shield — it rendered ~1.6x too large and overflowed. An explicit transform
+     is deterministic. */
+  #stage {
+    position: relative;
+    width: 1920px; height: 1080px;
+    transform-origin: top left;
+    display: flex; flex-direction: column;
+    /* Tightened from 38/26/22 to hand vertical space down to the camera panel. */
+    padding: 30px 54px 20px; gap: 16px;
+  }
+
+  /* Fullscreen camera. Lives inside #stage so it inherits the same scale. */
+  #camFull {
+    position: absolute; inset: 0; z-index: 50; background: #000;
+    display: none; align-items: center; justify-content: center;
+  }
+  #camFull.open { display: flex; }
+  #camFull img, #camFull video { width: 100%; height: 100%; object-fit: contain; }
+  #camFull img.hide, #camFull video.hide { display: none; }
+  #camFull .bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 28px 54px; display: flex; justify-content: space-between;
+    align-items: flex-end;
+    background: linear-gradient(transparent, rgba(0,0,0,.8));
+  }
+  #camFull .bar > div:first-child { display: flex; align-items: baseline; gap: 16px; }
+  #camFull .ttl { font-size: 36px; font-weight: 500; }
+  #camFull .mode { font-size: 15px; color: var(--ok); letter-spacing: .1em; text-transform: uppercase; }
+  #camFull .hint { font-size: 16px; color: var(--muted); }
+  #camFull .hint b {
+    background: rgba(255,255,255,.12); border-radius: 5px;
+    padding: 3px 9px; font-size: 13px; margin-right: 7px;
+  }
+
+  /* ---------- header ---------- */
+  .top { display: flex; align-items: flex-start; justify-content: space-between; }
+  .brand { letter-spacing: .22em; font-size: 17px; color: var(--muted); text-transform: uppercase; }
+  .brand b { color: var(--text); font-weight: 600; margin-right: 12px; }
+  .clock { font-size: 54px; font-weight: 300; line-height: 1; margin-top: 4px; letter-spacing: -.01em; }
+  .right { text-align: right; }
+  .date { font-size: 17px; color: var(--muted); }
+  .wx { display: flex; align-items: center; gap: 18px; justify-content: flex-end; margin-top: 10px; }
+  .wx .t { font-size: 44px; font-weight: 300; }
+  .wx .d { font-size: 17px; color: var(--muted); text-align: left; max-width: 230px; }
+
+  /* ---------- section label ---------- */
+  .lbl { font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+
+  /* ---------- focusable ---------- */
+  .f { outline: none; border: 1px solid var(--edge); background: var(--panel); border-radius: 14px; transition: background .12s, border-color .12s, transform .12s; }
+  .f:focus { border-color: var(--accent); background: var(--accent-dim); transform: translateY(-2px); }
+
+  /* ---------- apps ---------- */
+  /* Scrolled programmatically as focus moves, so no scrollbar is needed. */
+  .apps { display: flex; gap: 14px; overflow-x: hidden; scroll-behavior: smooth; }
+  .app { width: 190px; height: 78px; display: flex; align-items: center; gap: 13px; padding: 0 16px; flex: 0 0 auto; cursor: pointer; }
+  .app img { width: 44px; height: 44px; border-radius: 8px; flex: 0 0 auto; }
+  .app span { font-size: 19px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- controls ---------- */
+  .ctl { display: flex; gap: 14px; }
+  /* 60% of the width they'd take if they split the row evenly. */
+  .c { flex: 0 0 211px; height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; }
+  .c .n { font-size: 18px; font-weight: 500; }
+  .c .s { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  /* Drawn as SVG, not a font glyph: the Shield has no ⏻ (U+23FB) and renders
+     a tofu box for it. */
+  .c .pw { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
+  .c .pw svg { width: 17px; height: 17px; }
+  .c.on .pw { border-color: var(--ok); color: var(--ok); }
+  .c.on .s { color: var(--ok); }
+
+  /* ---------- panels ---------- */
+  .grid { flex: 1; display: grid; grid-template-columns: 1fr .78fr .95fr 1.35fr; gap: 18px; min-height: 0; }
+  .p { border: 1px solid var(--edge); background: var(--panel); border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; min-height: 0; }
+  .p h2 { font-size: 20px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline; }
+  .p h2 small { font-size: 14px; color: var(--muted); font-weight: 400; }
+
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { font-size: 19px; color: var(--muted); }
+  .row .v { font-size: 25px; font-weight: 500; }
+
+  /* ---------- thermostat ---------- */
+  .th { display: flex; flex-direction: column; height: 100%; }
+  .th .now { display: flex; gap: 34px; align-items: baseline; margin-bottom: 4px; }
+  .th .now b { font-size: 46px; font-weight: 300; }
+  .th .now span { font-size: 16px; color: var(--muted); }
+  .th .setrow { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 18px 0 20px; }
+  .th .step { width: 68px; height: 68px; border-radius: 50%; display: flex; align-items: center;
+              justify-content: center; font-size: 34px; font-weight: 300; cursor: pointer; }
+  .th .target { min-width: 150px; text-align: center; }
+  .th .target b { font-size: 56px; font-weight: 300; display: block; line-height: 1; }
+  .th .target span { font-size: 14px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+  .th .modes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .th .mode { flex: 1 1 0; min-width: 84px; height: 52px; display: flex; align-items: center;
+              justify-content: center; font-size: 17px; cursor: pointer; }
+  .th .mode.on { border-color: var(--ok); color: var(--ok); background: rgba(126,231,135,.12); }
+  .th .extra { margin-top: auto; padding-top: 14px; }
+
+  /* ---------- vacuum ---------- */
+  .vac .hdr { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+  .vac .hdr b { font-size: 30px; font-weight: 500; }
+  .vac .hdr span { font-size: 15px; color: var(--muted); }
+  .vac .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .vac .b { height: 56px; display: flex; align-items: center; justify-content: center;
+            text-align: center; font-size: 15px; line-height: 1.15; padding: 0 10px; cursor: pointer; }
+  .vac .b.wide { grid-column: span 2; }
+  .vac .sub { font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+              color: var(--muted); margin: 18px 0 10px; }
+
+  .appl { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
+  .appl .ic { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--edge); display: flex; align-items: center; justify-content: center; font-size: 19px; color: var(--muted); flex: 0 0 auto; }
+  .appl .n { font-size: 16px; color: var(--muted); }
+  .appl .v { font-size: 21px; font-weight: 500; }
+  .appl .d { font-size: 14px; color: var(--muted); margin-top: 2px; }
+
+  /* Flex rather than fixed rows, so any number of cameras divides the panel
+     evenly. */
+  .cams { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+  .cam { position: relative; flex: 1 1 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--edge); background: #000; min-height: 0; }
+  .cam img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cam .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 13px; font-size: 16px; background: linear-gradient(transparent, rgba(0,0,0,.75)); }
+  .cam.f:focus { border-color: var(--accent); }
+
+  /* ---------- footer ---------- */
+  .foot { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--muted); }
+  .keys { display: flex; gap: 22px; }
+  .keys b { background: rgba(255,255,255,.08); border-radius: 5px; padding: 3px 9px; font-weight: 600; font-size: 12px; margin-right: 7px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 8px; vertical-align: middle; }
+  .dot.ok { background: var(--ok); }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div class="top">
+    <div>
+      <div class="brand"><b>HOME</b> | SHIELD</div>
+      <div class="clock" id="clock">--:--</div>
+    </div>
+    <div class="right">
+      <div class="date" id="date"></div>
+      <div class="wx">
+        <div class="t" id="wxTemp">--°</div>
+        <div class="d" id="wxDesc">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="lbl">Your apps</div>
+    <div class="apps" id="apps"></div>
+  </div>
+
+  <div>
+    <div class="lbl">Home controls</div>
+    <div class="ctl" id="ctl"></div>
+  </div>
+
+  <div class="grid">
+    <div class="p">
+      <h2>Thermostat <small id="climState">—</small></h2>
+      <div class="th">
+        <div class="now">
+          <b id="thNow">--°</b>
+          <span id="thHum"></span>
+        </div>
+        <div class="setrow">
+          <div class="step f" id="thDown" tabindex="0">−</div>
+          <div class="target"><b id="thTarget">--</b><span>Target</span></div>
+          <div class="step f" id="thUp" tabindex="0">+</div>
+        </div>
+        <div class="modes" id="thModes"></div>
+      </div>
+    </div>
+    <div class="p">
+      <h2>Appliances and Status</h2>
+      <div id="appls"></div>
+    </div>
+    <div class="p">
+      <h2 id="vacTitle">Roborock <small id="vacState">—</small></h2>
+      <div class="vac">
+        <div class="hdr"><b id="vacBattery">—</b><span id="vacArea"></span></div>
+        <div class="btns" id="vacBtns"></div>
+        <div class="sub" id="vacRoutinesLabel" style="display:none">Routines</div>
+        <div class="btns" id="vacRoutines"></div>
+      </div>
+    </div>
+    <div class="p">
+      <h2>Cameras</h2>
+      <div class="cams" id="cams"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="keys">
+      <span><b>OK</b>Select</span>
+      <span><b>BACK</b>Top row</span>
+      <span><b>MENU</b>Settings</span>
+    </div>
+    <div><span class="dot" id="conn"></span><span id="connText">connecting…</span></div>
+  </div>
+
+  <div id="camFull">
+    <video id="camFullVid" class="hide" autoplay muted playsinline></video>
+    <img id="camFullImg" alt="">
+    <div class="bar">
+      <div>
+        <div class="ttl" id="camFullName"></div>
+        <div class="mode" id="camFullMode"></div>
+      </div>
+      <div class="hint"><b>BACK</b>Close<span style="margin-left:22px"></span><b>◀ ▶</b>Switch camera</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="hls.light.min.js"></script>
+<script>
+"use strict";
+
+var cfg = {}, ent = {}, states = {}, ws = null, msgId = 1;
+var pending = {}, subs = {}, entSubId = null;
+var hls = null, pc = null, rtcSession = null;
+
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+  return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
+
+/* ------------------------------------------------ clock */
+function tickClock() {
+  var d = new Date();
+  var h = d.getHours(), m = d.getMinutes();
+  var ap = h >= 12 ? "PM" : "AM";
+  var hh = h % 12; if (hh === 0) hh = 12;
+  $("clock").textContent = hh + ":" + (m < 10 ? "0" : "") + m + " " + ap;
+  $("date").textContent = d.toLocaleDateString(undefined,
+    { weekday: "long", day: "numeric", month: "long" });
+}
+
+/* ------------------------------------------------ apps */
+
+/* Installed labels rarely match a wish list exactly — "Max" vs "HBO Max",
+   "Amazon Prime Video" vs "Prime Video" — so match on squashed text and accept
+   containment either way. */
+function norm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+/* Demotion matches the other way round from orderRank: the installed label
+   must contain the key, so listing "YouTube Music" demotes only that and
+   leaves plain "YouTube" alone. */
+function matchesAny(label, list) {
+  var n = norm(label);
+  for (var i = 0; i < (list || []).length; i++) {
+    var k = norm(list[i]);
+    if (k && (n === k || n.indexOf(k) > -1)) return true;
+  }
+  return false;
+}
+
+function orderRank(label, order) {
+  var n = norm(label);
+  for (var i = 0; i < order.length; i++) {
+    var k = norm(order[i]);
+    if (!k) continue;
+    if (n === k) return i;                       // exact wins
+  }
+  // Containment one way only: the wish-list name may be longer than what
+  // Android calls the app ("HBO Max" -> "Max"), but not shorter, or
+  // "YouTube" would swallow "YouTube Music".
+  for (var j = 0; j < order.length; j++) {
+    var k2 = norm(order[j]);
+    if (!k2) continue;
+    if (k2.indexOf(n) > -1) return j + 0.5;
+  }
+  return Infinity;                                // everything else, after
+}
+
+function buildApps() {
+  var list = [];
+  try { list = JSON.parse(ShieldHome.apps()); } catch (e) {}
+
+  var order = ent.appOrder || [];
+  var last = ent.appLast || [];          // pinned to the very end
+  list.sort(function (a, b) {
+    var la = matchesAny(a.label, last), lb = matchesAny(b.label, last);
+    if (la !== lb) return la ? 1 : -1;
+    var ra = orderRank(a.label, order), rb = orderRank(b.label, order);
+    if (ra !== rb) return ra - rb;
+    return a.label.toLowerCase() < b.label.toLowerCase() ? -1 : 1;
+  });
+
+  var host = $("apps");
+  host.innerHTML = "";
+  // All of them. The row scrolls under the focus ring (see ensureVisible), so
+  // app count is not limited by what fits on screen.
+  list.forEach(function (a) {
+    var el = document.createElement("div");
+    el.className = "app f";
+    el.tabIndex = 0;
+    el.dataset.nav = "apps";
+    el.innerHTML = (a.icon ? '<img src="' + a.icon + '" alt="">' : "") +
+                   "<span>" + esc(a.label) + "</span>";
+    el.addEventListener("click", function () { ShieldHome.launchApp(a.pkg); });
+    host.appendChild(el);
+  });
+}
+
+/* ------------------------------------------------ HA socket */
+function connect() {
+  var proto = cfg.url.indexOf("https") === 0 ? "wss" : "ws";
+  var wsUrl = proto + "://" + cfg.url.replace(/^https?:\/\//, "") + "/api/websocket";
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = function () { setConn(false, "authenticating…"); };
+
+  ws.onmessage = function (e) {
+    var m = JSON.parse(e.data);
+    if (m.type === "auth_required") {
+      ws.send(JSON.stringify({ type: "auth", access_token: cfg.token }));
+    } else if (m.type === "auth_ok") {
+      setConn(true, "connected");
+      entSubId = send({ type: "subscribe_entities" });
+    } else if (m.type === "auth_invalid") {
+      setConn(false, "token rejected");
+    } else if (m.type === "event" && m.id === entSubId) {
+      applyStates(m.event);
+      renderAll();
+    } else if (m.type === "event" && subs[m.id]) {
+      subs[m.id](m.event);
+    } else if (m.type === "result" && pending[m.id]) {
+      var cb = pending[m.id];
+      delete pending[m.id];
+      cb(m);
+    }
+  };
+
+  ws.onclose = function () {
+    setConn(false, "reconnecting…");
+    setTimeout(connect, 4000);
+  };
+  ws.onerror = function () { try { ws.close(); } catch (e) {} };
+}
+
+function send(msg, cb) {
+  msg.id = msgId++;
+  if (cb) pending[msg.id] = cb;
+  ws.send(JSON.stringify(msg));
+  return msg.id;
+}
+
+/** Like send(), but keeps the handler for the stream of events that follow. */
+function subscribe(msg, onEvent, onResult) {
+  msg.id = msgId++;
+  subs[msg.id] = onEvent;
+  if (onResult) pending[msg.id] = onResult;
+  ws.send(JSON.stringify(msg));
+  return msg.id;
+}
+
+function setConn(ok, text) {
+  $("conn").className = "dot" + (ok ? " ok" : "");
+  $("connText").textContent = text;
+}
+
+/* subscribe_entities sends a compact diff format: a= added, c= changed */
+function applyStates(ev) {
+  if (ev.a) for (var k in ev.a) states[k] = { s: ev.a[k].s, a: ev.a[k].a || {} };
+  if (ev.c) for (var k2 in ev.c) {
+    var ch = ev.c[k2];
+    if (!states[k2]) states[k2] = { s: "", a: {} };
+    if (ch["+"]) {
+      if (ch["+"].s !== undefined) states[k2].s = ch["+"].s;
+      if (ch["+"].a) for (var ak in ch["+"].a) states[k2].a[ak] = ch["+"].a[ak];
+    }
+  }
+}
+
+function st(id) { return states[id] ? states[id].s : null; }
+function attr(id, k) { return states[id] && states[id].a ? states[id].a[k] : null; }
+
+function callService(domain, service, entity_id, data) {
+  var msg = { type: "call_service", domain: domain, service: service,
+              target: { entity_id: entity_id } };
+  if (data) msg.service_data = data;
+  send(msg);
+}
+
+/* ------------------------------------------------ controls */
+function isOn(id) {
+  var s = st(id);
+  return s === "on" || s === "open" || s === "playing" || s === "cleaning";
+}
+
+function toggleEntity(id) {
+  var dom = id.split(".")[0];
+  if (dom === "button") { callService("button", "press", id); return; }
+  if (dom === "humidifier") { callService("humidifier", "toggle", id); return; }
+  if (dom === "vacuum") {
+    callService("vacuum", isOn(id) ? "return_to_base" : "start", id); return;
+  }
+  callService("homeassistant", "toggle", id);
+}
+
+var POWER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+  'stroke-linecap="round"><path d="M12 3.2v8.3"/>' +
+  '<path d="M6.6 7.4a7.6 7.6 0 1 0 10.8 0"/></svg>';
+
+function buildControls() {
+  var host = $("ctl");
+  host.innerHTML = "";
+  (ent.controls || []).forEach(function (c) {
+    var el = document.createElement("div");
+    el.className = "c f";
+    el.tabIndex = 0;
+    el.dataset.nav = "ctl";
+    el.dataset.entity = c.entity;
+    if (c.status) el.dataset.status = c.status;
+    el.innerHTML = '<div><div class="n">' + esc(c.name) + '</div>' +
+                   '<div class="s"></div></div><div class="pw">' + POWER_SVG + "</div>";
+    el.addEventListener("click", function () { toggleEntity(c.entity); });
+    host.appendChild(el);
+  });
+}
+
+function renderControls() {
+  Array.prototype.forEach.call($("ctl").children, function (el) {
+    var id = el.dataset.entity, dom = id.split(".")[0];
+    var statusId = el.dataset.status;
+    var on = isOn(id);
+    var sub = el.querySelector(".s");
+
+    // With a status entity (e.g. a ping sensor next to a power switch), the
+    // ring reflects whether the machine is actually up — which is not the same
+    // thing as whether the switch is on.
+    if (statusId && st(statusId) != null) {
+      var up = isOn(statusId);
+      el.classList.toggle("on", up);
+      sub.textContent = (up ? "Online" : "Offline") + " · " +
+                        (on ? "Turn off" : "Turn on");
+      return;
+    }
+
+    el.classList.toggle("on", on);
+    if (dom === "button") sub.textContent = "Press to run";
+    else if (st(id) == null) sub.textContent = "unavailable";
+    else sub.textContent = on ? "On · Turn off" : "Off · Turn on";
+  });
+}
+
+/* ------------------------------------------------ panels */
+/* ------------------------------------------------ thermostat
+   A real control rather than a readout: +/- adjust the setpoint and the mode
+   buttons call climate.set_hvac_mode. All of it is focusable, which the HA
+   thermostat dial never could be with a D-pad. */
+var MODE_LABEL = { off: "Off", heat: "Heat", cool: "Cool",
+                   heat_cool: "Auto", auto: "Auto", dry: "Dry", fan_only: "Fan" };
+
+function thStep(delta) {
+  var c = ent.climate; if (!c) return;
+  var tgt = attr(c, "temperature");
+  if (tgt == null) return;
+  var step = attr(c, "target_temp_step") || 1;
+  var next = Math.round((Number(tgt) + delta * step) * 10) / 10;
+  var lo = attr(c, "min_temp"), hi = attr(c, "max_temp");
+  if (lo != null) next = Math.max(Number(lo), next);
+  if (hi != null) next = Math.min(Number(hi), next);
+  // Paint immediately; the state echo confirms a moment later.
+  $("thTarget").textContent = next + "°";
+  callService("climate", "set_temperature", c, { temperature: next });
+}
+
+function buildThermostat() {
+  $("thDown").addEventListener("click", function () { thStep(-1); });
+  $("thUp").addEventListener("click", function () { thStep(1); });
+}
+
+function renderThermostat() {
+  var c = ent.climate;
+  if (!c || st(c) == null) {
+    $("climState").textContent = "unavailable";
+    return;
+  }
+  var mode = st(c);
+  var action = attr(c, "hvac_action");
+  $("climState").textContent = prettyState(action || mode);
+
+  var cur = attr(c, "current_temperature");
+  var u = attr(c, "unit_of_measurement") || "°F";
+  $("thNow").textContent = cur != null ? cur + " " + u : "--°";
+
+  var hum = attr(c, "current_humidity");
+  $("thHum").textContent = hum != null ? "Humidity " + hum + "%" : "";
+
+  var tgt = attr(c, "temperature");
+  $("thTarget").textContent = tgt != null ? tgt + "°" : "—";
+
+  // Rebuild mode buttons only when the available set changes, so focus is not
+  // yanked away on every state update.
+  var modes = attr(c, "hvac_modes") || ["off", "heat", "cool"];
+  var host = $("thModes");
+  if (host.dataset.modes !== modes.join(",")) {
+    host.dataset.modes = modes.join(",");
+    host.innerHTML = "";
+    modes.forEach(function (m) {
+      var el = document.createElement("div");
+      el.className = "mode f";
+      el.tabIndex = 0;
+      el.dataset.mode = m;
+      el.textContent = MODE_LABEL[m] || prettyState(m);
+      el.addEventListener("click", function () {
+        callService("climate", "set_hvac_mode", c, { hvac_mode: m });
+      });
+      host.appendChild(el);
+    });
+  }
+  Array.prototype.forEach.call(host.children, function (el) {
+    el.classList.toggle("on", el.dataset.mode === mode);
+  });
+}
+
+/* HA states are terse and sometimes run words together ("partlycloudy"), so
+   the ones that show up on this screen get readable labels. Anything not
+   listed falls back to underscores-to-spaces. */
+var STATE_LABEL = {
+  stop: "Stopped", stopped: "Stopped", run: "Running", running: "Running",
+  pause: "Paused", paused: "Paused", finish: "Finished", finished: "Finished",
+  idle: "Idle", off: "Off", on: "On", none: "—",
+  docked: "Docked", charging: "Charging", cleaning: "Cleaning",
+  returning: "Returning", error: "Error", unavailable: "Unavailable",
+  unknown: "Unknown", standby: "Standby", delay: "Delayed", prepare: "Preparing",
+  partlycloudy: "Partly cloudy", clearnight: "Clear night",
+  "clear-night": "Clear night", cloudy: "Cloudy", sunny: "Sunny",
+  rainy: "Rainy", pouring: "Pouring", snowy: "Snowy",
+  "snowy-rainy": "Sleet", lightning: "Lightning",
+  "lightning-rainy": "Thunderstorms", windy: "Windy",
+  "windy-variant": "Windy", fog: "Fog", hail: "Hail", exceptional: "Exceptional"
+};
+
+function prettyState(s) {
+  if (s == null) return "—";
+  var k = String(s).toLowerCase();
+  if (STATE_LABEL[k]) return STATE_LABEL[k];
+  return String(s).replace(/_/g, " ").replace(/^./, function (m) { return m.toUpperCase(); });
+}
+
+function renderAppliances() {
+  $("appls").innerHTML = (ent.appliances || []).map(function (a) {
+    var s = prettyState(st(a.entity));
+    var d = "";
+    if (a.detail && st(a.detail)) {
+      var raw = st(a.detail);
+      var t = Date.parse(raw);
+      if (!isNaN(t)) {
+        var mins = Math.round((t - Date.now()) / 60000);
+        if (mins > 0) d = mins >= 60
+          ? Math.floor(mins / 60) + "h " + (mins % 60) + "m remaining"
+          : mins + "m remaining";
+      }
+    }
+    return '<div class="appl"><div class="ic">◉</div><div>' +
+           '<div class="n">' + esc(a.name) + "</div>" +
+           '<div class="v">' + esc(s) + "</div>" +
+           (d ? '<div class="d">' + esc(d) + "</div>" : "") +
+           "</div></div>";
+  }).join("");
+}
+
+/* ------------------------------------------------ vacuum
+   Stop and Return to Dock are core vacuum services. Everything else the
+   Roborock integration offers — empty dustbin, wash mop, each routine — comes
+   through as its own button entity, so they are discovered from the state
+   machine rather than hard-coded, and keep whatever names HA gave them. */
+
+/* Dock-maintenance actions, matched exactly. Anything else belonging to the
+   vacuum is treated as one of your routines. */
+var CARE_ACTIONS = [
+  "emptydustbin", "emptythedustbin",
+  "washmop", "washthemop", "startwashingmop",
+  "drymop", "drythemop", "stopdrying", "pausedrying"
+];
+
+function vacuumStem() {
+  var v = (ent.vacuum || {}).entity;
+  if (!v) return "";
+  return (v.split(".")[1] || "").replace(/_(vacuum|robot)$/, "");
+}
+
+/* HA moved battery off the vacuum entity onto its own sensor, so look there
+   first and fall back to the old attribute. Same for the status text. */
+function vacuumSensor(suffix) {
+  var stem = vacuumStem();
+  if (!stem) return null;
+  var exact = "sensor." + stem + "_" + suffix;
+  if (states[exact]) return exact;
+  var hit = null;
+  Object.keys(states).forEach(function (id) {
+    if (hit) return;
+    if (id.indexOf("sensor.") !== 0) return;
+    if (id.indexOf(stem) === -1) return;
+    if (id.indexOf(suffix) > -1) hit = id;
+  });
+  return hit;
+}
+
+/**
+ * Button names arrive prefixed with the device: "Roborock Qrevo Master Empty
+ * dustbin". Strip that prefix so the tile reads "Empty dustbin".
+ *
+ * The device's own friendly_name is tried first and the entity-id stem second,
+ * because the two do not always agree — and if the prefix is not stripped, the
+ * name never matches CARE_ACTIONS and a dock action is misfiled as a routine.
+ */
+function stripDevicePrefix(name, vacuumEntity, stem) {
+  var out = name;
+  var fname = attr(vacuumEntity, "friendly_name");
+
+  [fname, (stem || "").replace(/_/g, " ")].forEach(function (p) {
+    if (!p) return;
+    var re = new RegExp("^\\s*" + p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+                                   .replace(/[\s_]+/g, "[\\s_]+") + "[\\s_]*", "i");
+    if (re.test(out)) out = out.replace(re, "");
+  });
+
+  out = out.trim();
+  if (!out) out = name;
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+function vacuumButtons() {
+  var v = (ent.vacuum || {}).entity;
+  if (!v) return { care: [], routines: [] };
+  var stem = vacuumStem();
+  var care = [], routines = [];
+
+  Object.keys(states).forEach(function (id) {
+    if (id.indexOf("button.") !== 0) return;
+    if (id.indexOf(stem) === -1) return;
+    var name = attr(id, "friendly_name") || id.split(".")[1].replace(/_/g, " ");
+    var short = stripDevicePrefix(name, v, stem);
+    // Match maintenance actions exactly, not by substring: a routine called
+    // "Mop Hall" must not be mistaken for the "Wash mop" dock action.
+    if (CARE_ACTIONS.indexOf(norm(short)) > -1) {
+      care.push({ id: id, label: short });
+    } else {
+      routines.push({ id: id, label: short });
+    }
+  });
+  care.sort(function (a, b) { return a.label < b.label ? -1 : 1; });
+  routines.sort(function (a, b) { return a.label < b.label ? -1 : 1; });
+  return { care: care, routines: routines };
+}
+
+function vacBtn(label, fn, wide) {
+  var el = document.createElement("div");
+  el.className = "b f" + (wide ? " wide" : "");
+  el.tabIndex = 0;
+  el.textContent = label;
+  el.addEventListener("click", fn);
+  return el;
+}
+
+function renderVacuum() {
+  var cfgv = ent.vacuum || {};
+  var v = cfgv.entity;
+  if (!v) return;
+
+  $("vacTitle").firstChild.textContent = (cfgv.name || "Vacuum") + " ";
+  $("vacState").textContent = prettyState(st(v));
+
+  var batId = vacuumSensor("battery");
+  var bat = batId ? st(batId) : attr(v, "battery_level");
+  $("vacBattery").textContent = bat != null && bat !== "unavailable" ? bat + "%" : "—";
+
+  var statId = vacuumSensor("status");
+  var status = (statId ? st(statId) : null) || attr(v, "status") || "";
+  $("vacArea").textContent = status ? prettyState(status) : "";
+
+  var found = vacuumButtons();
+  var sig = "core|" + found.care.map(function (b) { return b.id; }).join(",");
+  var host = $("vacBtns");
+
+  if (host.dataset.sig !== sig) {
+    host.dataset.sig = sig;
+    host.innerHTML = "";
+    host.appendChild(vacBtn("Stop", function () { callService("vacuum", "stop", v); }));
+    host.appendChild(vacBtn("Return to Dock", function () {
+      callService("vacuum", "return_to_base", v);
+    }));
+
+    if (found.care.length) {
+      // The integration exposed real button entities — prefer those.
+      found.care.forEach(function (b) {
+        host.appendChild(vacBtn(b.label, function () {
+          callService("button", "press", b.id);
+        }));
+      });
+    } else {
+      // It didn't, so drive the dock over Roborock's own command channel.
+      host.appendChild(vacBtn("Empty Dustbin", function () {
+        callService("vacuum", "send_command", v, { command: "app_start_collect_dust" });
+      }));
+      host.appendChild(vacBtn("Wash Mop", function () {
+        callService("vacuum", "send_command", v, { command: "app_start_wash" });
+      }));
+    }
+  }
+
+  var rsig = found.routines.map(function (b) { return b.id; }).join(",");
+  var rhost = $("vacRoutines");
+  if (rhost.dataset.sig !== rsig) {
+    rhost.dataset.sig = rsig;
+    rhost.innerHTML = "";
+    found.routines.forEach(function (b) {
+      rhost.appendChild(vacBtn(b.label, function () {
+        callService("button", "press", b.id);
+      }));
+    });
+    $("vacRoutinesLabel").style.display = found.routines.length ? "block" : "none";
+  }
+}
+
+/* Camera stills refreshed on a timer. entity_picture carries its own signed
+   token, so no Authorization header is needed. Live H.264 would need go2rtc
+   and a video element; stills keep the home screen cheap on a Tegra X1. */
+function buildCameras() {
+  var host = $("cams");
+  host.innerHTML = "";
+  (ent.cameras || []).forEach(function (c) {
+    var el = document.createElement("div");
+    el.className = "cam f";
+    el.tabIndex = 0;
+    el.dataset.nav = "cams";
+    el.dataset.entity = c.entity;
+    el.innerHTML = '<img alt=""><div class="cap">' + esc(c.name) + "</div>";
+    el.addEventListener("click", function () { openCamera(c.entity, c.name); });
+    host.appendChild(el);
+  });
+}
+
+/* ------------------------------------------------ fullscreen camera */
+var camOpen = null, camReturn = null, camTimer = null;
+
+function camList() { return ent.cameras || []; }
+
+var camProbe = null;
+
+function openCamera(entity, name) {
+  camOpen = entity;
+  camReturn = document.activeElement;
+  $("camFullName").textContent = name || "";
+  $("camFull").classList.add("open");
+  startFullStream();
+}
+
+function closeCamera() {
+  stopFullStream();
+  camOpen = null;
+  $("camFull").classList.remove("open");
+  if (camReturn && camReturn.focus) camReturn.focus();
+}
+
+function stopFullStream() {
+  if (camTimer) { clearInterval(camTimer); camTimer = null; }
+  if (camProbe) { clearTimeout(camProbe); camProbe = null; }
+  teardownRtc();
+  teardownHls();
+  var img = $("camFullImg");
+  img.onerror = null;
+  img.src = "";               // closes the MJPEG connection
+}
+
+/* entity_picture carries a signed token that the stream endpoint accepts too. */
+function cameraToken(entity) {
+  var pic = attr(entity, "entity_picture") || "";
+  var m = pic.match(/[?&]token=([^&]+)/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Four tiers, best first:
+ *
+ *   1. WebRTC — sub-second, hardware decoded. HA brokers the offer/answer over
+ *      its WebSocket and go2rtc (bundled in recent HA) serves the stream.
+ *   2. HLS — hardware decoded but segment-based, so a second or two behind.
+ *   3. MJPEG — native rate, software JPEG decode, heavy on a Tegra X1.
+ *   4. Stills once a second.
+ */
+function startFullStream() {
+  stopFullStream();
+  if (!camOpen) return;
+  if (!ws || ws.readyState !== 1) { startMjpeg(); return; }
+  setLiveBadge("Connecting");
+  startWebRTC();
+}
+
+function startHls() {
+  var want = camOpen;
+  send({ type: "camera/stream", entity_id: camOpen, format: "hls" }, function (res) {
+    if (want !== camOpen) return;                 // user already switched away
+    if (res && res.success && res.result && res.result.url) {
+      playHls(cfg.url + res.result.url);
+    } else {
+      console.log("[cam] no HLS stream for " + want + ", trying mjpeg");
+      startMjpeg();
+    }
+  });
+}
+
+/* ---- tier 1: WebRTC ------------------------------------------------ */
+
+function startWebRTC() {
+  var want = camOpen;
+  if (typeof RTCPeerConnection === "undefined") { startHls(); return; }
+
+  function giveUp(why) {
+    console.log("[cam] webrtc unavailable (" + why + "), trying hls");
+    teardownRtc();
+    if (want === camOpen) startHls();
+  }
+
+  try {
+    // Everything is on the LAN, so host candidates are enough — no STUN.
+    pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: "max-bundle" });
+  } catch (e) { giveUp("no pc"); return; }
+
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
+
+  pc.ontrack = function (e) {
+    var vid = $("camFullVid");
+    if (vid.srcObject !== e.streams[0]) {
+      vid.srcObject = e.streams[0];
+      vid.play().catch(function () {});
+      $("camFullImg").classList.add("hide");
+      vid.classList.remove("hide");
+      setLiveBadge("Live · Low latency");
+    }
+  };
+
+  pc.onicecandidate = function (e) {
+    if (!e.candidate || !rtcSession) return;
+    send({
+      type: "camera/webrtc/candidate",
+      entity_id: want,
+      session_id: rtcSession,
+      candidate: { candidate: e.candidate.candidate, sdpMLineIndex: e.candidate.sdpMLineIndex }
+    });
+  };
+
+  pc.createOffer().then(function (offer) {
+    return pc.setLocalDescription(offer).then(function () {
+      subscribe(
+        { type: "camera/webrtc/offer", entity_id: want, offer: offer.sdp },
+        function (ev) {                               // streamed events
+          if (!ev || want !== camOpen) return;
+          if (ev.type === "session") {
+            rtcSession = ev.session_id;
+          } else if (ev.type === "answer" && ev.answer) {
+            pc.setRemoteDescription({ type: "answer", sdp: ev.answer })
+              .catch(function (err) { giveUp("sdp " + err); });
+          } else if (ev.type === "candidate" && ev.candidate) {
+            var c = ev.candidate.candidate !== undefined ? ev.candidate : { candidate: ev.candidate };
+            pc.addIceCandidate(c).catch(function () { /* non-fatal */ });
+          } else if (ev.type === "error") {
+            giveUp(ev.message || "ha error");
+          }
+        },
+        function (res) {                              // immediate result
+          if (res && res.success === false) giveUp((res.error && res.error.code) || "refused");
+        }
+      );
+    });
+  }).catch(function (err) { giveUp("offer " + err); });
+
+  // If no frame arrives quickly, drop to HLS rather than sitting on a blank screen.
+  camProbe = setTimeout(function () {
+    var vid = $("camFullVid");
+    if (camOpen === want && vid.readyState < 2) giveUp("no frames");
+  }, 5000);
+}
+
+function teardownRtc() {
+  if (camProbe) { clearTimeout(camProbe); camProbe = null; }
+  if (rtcSession && ws && ws.readyState === 1) {
+    // Best effort; HA also cleans up when the peer connection closes.
+    try { send({ type: "camera/webrtc/close", session_id: rtcSession }); } catch (e) {}
+  }
+  rtcSession = null;
+  if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+  var vid = $("camFullVid");
+  if (vid.srcObject) { vid.srcObject = null; }
+}
+
+function playHls(url) {
+  var vid = $("camFullVid"), img = $("camFullImg");
+
+  function giveUp(why) {
+    console.log("[cam] hls failed (" + why + "), trying mjpeg");
+    teardownHls();
+    startMjpeg();
+  }
+
+  if (typeof Hls === "undefined" || !Hls.isSupported()) { giveUp("unsupported"); return; }
+
+  hls = new Hls({
+    // Keep close to the live edge: a TV wall display wants current, not buffered.
+    liveSyncDurationCount: 1,
+    liveMaxLatencyDurationCount: 4,
+    maxBufferLength: 4,
+    manifestLoadingTimeOut: 8000
+  });
+  hls.on(Hls.Events.ERROR, function (e, data) { if (data && data.fatal) giveUp(data.type); });
+  hls.loadSource(url);
+  hls.attachMedia(vid);
+  vid.play().catch(function () { /* autoplay is allowed, muted */ });
+
+  img.classList.add("hide");
+  vid.classList.remove("hide");
+  setLiveBadge("Live · HD");
+
+  camProbe = setTimeout(function () {
+    if (camOpen && vid.readyState < 2) giveUp("no frames");
+  }, 8000);
+}
+
+function teardownHls() {
+  if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+  var vid = $("camFullVid");
+  try { vid.pause(); } catch (e) {}
+  vid.removeAttribute("src");
+  vid.classList.add("hide");
+  $("camFullImg").classList.remove("hide");
+}
+
+/** Tier 2: multipart MJPEG. Native rate, but software JPEG decode. */
+function startMjpeg() {
+  if (camProbe) { clearTimeout(camProbe); camProbe = null; }
+  teardownRtc();
+  var tok = cameraToken(camOpen);
+  var img = $("camFullImg");
+  if (!tok) { pollFullCamera(); return; }
+
+  img.onerror = function () {
+    console.log("[cam] mjpeg failed, falling back to stills");
+    pollFullCamera();
+  };
+  img.src = cfg.url + "/api/camera_proxy_stream/" + camOpen + "?token=" + tok;
+  setLiveBadge("Live");
+
+  camProbe = setTimeout(function () {
+    if (camOpen && !img.naturalWidth) {
+      console.log("[cam] no mjpeg frame, falling back to stills");
+      pollFullCamera();
+    }
+  }, 4000);
+}
+
+/** Fallback: the old still-refresh loop, a bit quicker than the thumbnails. */
+function pollFullCamera() {
+  if (camTimer) clearInterval(camTimer);
+  if (camProbe) { clearTimeout(camProbe); camProbe = null; }
+  teardownHls();
+  var img = $("camFullImg");
+  img.onerror = null;
+  setLiveBadge("1 fps");
+  paintFullCamera();
+  camTimer = setInterval(paintFullCamera, 1000);
+}
+
+function paintFullCamera() {
+  if (!camOpen) return;
+  var pic = attr(camOpen, "entity_picture");
+  if (!pic) return;
+  $("camFullImg").src =
+    cfg.url + pic + (pic.indexOf("?") > -1 ? "&" : "?") + "_=" + Date.now();
+}
+
+function setLiveBadge(text) {
+  var el = $("camFullMode");
+  if (el) el.textContent = text;
+}
+
+/** Cycle to the next/previous configured camera without leaving fullscreen. */
+function stepCamera(dir) {
+  var list = camList();
+  if (list.length < 2) return;
+  var i = -1;
+  list.forEach(function (c, n) { if (c.entity === camOpen) i = n; });
+  if (i === -1) return;
+  var next = list[(i + dir + list.length) % list.length];
+  camOpen = next.entity;
+  $("camFullName").textContent = next.name || "";
+  startFullStream();
+}
+
+function refreshCameras() {
+  Array.prototype.forEach.call($("cams").children, function (el) {
+    var pic = attr(el.dataset.entity, "entity_picture");
+    if (!pic) return;
+    var img = el.querySelector("img");
+    img.src = cfg.url + pic + (pic.indexOf("?") > -1 ? "&" : "?") + "_=" + Date.now();
+  });
+}
+
+function renderWeather() {
+  var w = ent.weather, s = w ? st(w) : null;
+  var box = document.querySelector(".wx");
+  if (!s) { box.style.display = "none"; return; }   // no weather entity set up
+  box.style.display = "flex";
+  var t = attr(w, "temperature");
+  var u = attr(w, "temperature_unit") || "";
+  $("wxTemp").textContent = (t != null ? Math.round(t) + (u || "°") : "--°");
+  var hum = attr(w, "humidity"), wind = attr(w, "wind_speed");
+  var bits = [prettyState(s)];
+  if (hum != null) bits.push("Humidity " + hum + "%");
+  if (wind != null) bits.push("Wind " + Math.round(wind));
+  $("wxDesc").textContent = bits.join(" · ");
+}
+
+function renderAll() {
+  renderControls();
+  renderWeather();
+  renderThermostat();
+  renderAppliances();
+  renderVacuum();
+}
+
+/* ------------------------------------------------ D-pad navigation
+   Real 2D spatial navigation: pick the nearest focusable whose centre lies in
+   the direction pressed. Because this page owns its own markup, this works
+   properly — which it never could inside a Lovelace dashboard. */
+function focusables() {
+  return Array.prototype.slice.call(document.querySelectorAll(".f"));
+}
+
+function move(dir) {
+  var all = focusables();
+  if (!all.length) return;
+  var cur = document.activeElement;
+  if (!cur || all.indexOf(cur) === -1) { all[0].focus(); return; }
+  var r = cur.getBoundingClientRect();
+  var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  var best = null, bestScore = Infinity;
+
+  all.forEach(function (el) {
+    if (el === cur) return;
+    var b = el.getBoundingClientRect();
+    var bx = b.left + b.width / 2, by = b.top + b.height / 2;
+    var dx = bx - cx, dy = by - cy;
+    var forward = dir === "right" ? dx : dir === "left" ? -dx
+                : dir === "down" ? dy : -dy;
+    if (forward <= 8) return;                       // not in this direction
+    var lateral = (dir === "left" || dir === "right") ? Math.abs(dy) : Math.abs(dx);
+    var score = forward + lateral * 2.5;            // prefer straight ahead
+    if (score < bestScore) { bestScore = score; best = el; }
+  });
+
+  if (best) { best.focus(); ensureVisible(best); }
+}
+
+/* Keep the focused app tile on screen by scrolling its row, so the app list
+   is not capped at what fits across 1920px. */
+function ensureVisible(el) {
+  var row = el.parentNode;
+  if (!row || row.id !== "apps") return;
+  var l = el.offsetLeft, r = l + el.offsetWidth, pad = 24;
+  if (l - pad < row.scrollLeft) {
+    row.scrollLeft = Math.max(0, l - pad);
+  } else if (r + pad > row.scrollLeft + row.clientWidth) {
+    row.scrollLeft = r + pad - row.clientWidth;
+  }
+}
+
+document.addEventListener("keydown", function (e) {
+  // Fullscreen camera swallows navigation: arrows switch feeds, BACK/OK exits.
+  if (camOpen) {
+    switch (e.keyCode) {
+      case 39: stepCamera(1); break;
+      case 37: stepCamera(-1); break;
+      case 4: case 27: case 13: case 23: closeCamera(); break;
+    }
+    e.preventDefault();
+    return;
+  }
+
+  switch (e.keyCode) {
+    case 39: move("right"); e.preventDefault(); break;
+    case 37: move("left");  e.preventDefault(); break;
+    case 40: move("down");  e.preventDefault(); break;
+    case 38: move("up");    e.preventDefault(); break;
+    case 13: case 23:
+      if (document.activeElement && document.activeElement.click) {
+        document.activeElement.click();
+      }
+      e.preventDefault();
+      break;
+    case 4: case 27:                                 // BACK → first app tile
+      var a = document.querySelector('.app.f');
+      if (a) { a.focus(); e.preventDefault(); }
+      break;
+  }
+});
+
+/* ------------------------------------------------ fit to panel
+   Scale the fixed 1920x1080 stage down to whatever the WebView actually is.
+   On a 1080p Shield the WebView reports ~960 CSS px, so the scale lands at
+   0.5 and each design pixel maps to one physical pixel — sharp, and the whole
+   layout is guaranteed to fit with no scrolling. */
+function fit() {
+  var stage = $("stage");
+  var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  stage.style.transform = "scale(" + s + ")";
+  // Centre any letterboxing left over from a non-16:9 panel.
+  var ox = Math.max(0, (window.innerWidth - 1920 * s) / 2);
+  var oy = Math.max(0, (window.innerHeight - 1080 * s) / 2);
+  stage.style.marginLeft = ox + "px";
+  stage.style.marginTop = oy + "px";
+}
+
+/* ------------------------------------------------ boot */
+function boot() {
+  fit();
+  window.addEventListener("resize", fit);
+  try { cfg = JSON.parse(ShieldHome.config()); } catch (e) { cfg = {}; }
+  ent = cfg.entities || {};
+
+  tickClock();
+  setInterval(tickClock, 15000);
+
+  buildApps();
+  buildControls();
+  buildThermostat();
+  buildCameras();
+  renderAll();
+
+  var first = document.querySelector(".app.f") || document.querySelector(".f");
+  if (first) first.focus();
+
+  if (cfg.url && cfg.token) {
+    connect();
+    setInterval(refreshCameras, 2000);
+  } else {
+    setConn(false, "not configured");
+  }
+}
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+Shield Home
+Copyright (C) 2026 Shield Home contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License version 3 as published by the Free
+Software Foundation. See LICENSE for the full text.
+
+--------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------
+
+hls.js - app/src/main/assets/hls.light.min.js
+  Copyright (c) Dailymotion and contributors
+  Licensed under the Apache License, Version 2.0
+  https://github.com/video-dev/hls.js
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Bundled rather than loaded from a CDN so the launcher works on a network
+  with no internet access.
+
+--------------------------------------------------------------------------
+
+Not affiliated with Home Assistant, the Open Home Foundation, or NVIDIA.
+Home Assistant is a trademark of the Open Home Foundation.
+NVIDIA and SHIELD are trademarks of NVIDIA Corporation.

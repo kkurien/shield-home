@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:padding="48dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Home Assistant"
+            android:textColor="@color/text"
+            android:textSize="28sp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tip: set these over adb instead of typing here — see the README."
+            android:textColor="#FF9AA0A6"
+            android:textSize="14sp"
+            android:paddingBottom="24dp" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Base URL" android:textColor="@color/text" android:textSize="16sp" />
+        <EditText android:id="@+id/url"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="http://192.168.1.10:8123"
+            android:textColor="@color/text" android:textColorHint="#FF5F6368"
+            android:inputType="textUri" android:singleLine="true"
+            android:layout_marginBottom="20dp" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Dashboard path" android:textColor="@color/text" android:textSize="16sp" />
+        <EditText android:id="@+id/path"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="/lovelace-tv/0"
+            android:textColor="@color/text" android:textColorHint="#FF5F6368"
+            android:singleLine="true" android:layout_marginBottom="20dp" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Long-lived access token" android:textColor="@color/text" android:textSize="16sp" />
+        <EditText android:id="@+id/token"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="eyJhbGciOi..."
+            android:textColor="@color/text" android:textColorHint="#FF5F6368"
+            android:singleLine="true" android:layout_marginBottom="28dp" />
+
+        <Button android:id="@+id/save"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Save and continue" />
+    </LinearLayout>
+</ScrollView>
