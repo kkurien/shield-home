@@ -44,6 +44,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Android only materialises an app's external files directory once the
+        // app asks for it. Do that at launch so `adb push` has somewhere to put
+        // an entities file before the app has ever been configured.
+        runCatching { getExternalFilesDir(null)?.mkdirs() }
+
         if (!Config.isConfigured(this)) {
             startActivity(Intent(this, SetupActivity::class.java))
             finish()

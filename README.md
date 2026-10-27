@@ -96,7 +96,18 @@ adb shell am start -n com.shieldhome/.SetupActivity \
   -e entitiesFile my-entities.json -e finish true
 ```
 
-That directory belongs to the app, so it needs no storage permission.
+That directory belongs to the app, so it needs no storage permission. It is
+created the first time the launcher runs — if the push fails with *Is a
+directory*, launch the app once and try again, or
+`adb shell mkdir -p /sdcard/Android/data/com.shieldhome/files`.
+
+`/sdcard/Download` also works, if that is easier:
+
+```bash
+adb push my-entities.json /sdcard/Download/
+adb shell am start -n com.shieldhome/.SetupActivity \
+  -e entitiesFile /sdcard/Download/my-entities.json -e finish true
+```
 
 | Key | What it does |
 | --- | --- |

@@ -45,12 +45,20 @@ class SetupActivity : Activity() {
      * storage permission and is writable by `adb push`.
      */
     private fun readEntitiesFile(name: String): String? {
-        val f = File(getExternalFilesDir(null), name.substringAfterLast('/'))
-        return try {
-            if (f.isFile) f.readText() else null
-        } catch (e: Exception) {
-            null
+        val dir = getExternalFilesDir(null)
+        runCatching { dir?.mkdirs() }
+        val short = name.substringAfterLast('/')
+        // Accept a bare filename in the app's own directory, or any absolute
+        // path the user pushed it to.
+        val candidates = listOfNotNull(
+            dir?.let { File(it, short) },
+            if (name.startsWith("/")) File(name) else null,
+            File("/sdcard/Download", short)
+        )
+        for (f in candidates) {
+            runCatching { if (f.isFile) return f.readText() }
         }
+        return null
     }
 
     /**
